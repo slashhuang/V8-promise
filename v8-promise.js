@@ -11,23 +11,27 @@ const kResolveCallback = 0;
 const kRejectCallback = 1;
 const UNDEFINED = undefined;
 
-let { SET_PRIVATE,_Call,utils } = require('./util');
+let { SET_PRIVATE,_Call,utils,IS_CALLABLE } = require('./util');
 // promise主逻辑
 const GlobalPromise = (executor)=>{
 	let promise = PromiseInit(GlobalPromise);
 	//create_resolving_functions这个函数的实现在bootstraper.cc第3622行 
-	let callbacks =  create_resolving_functions(promise, true);
+	// let callbacks =  create_resolving_functions(promise, true);
 	try{
-    	executor(callbacks[kResolveCallback], callbacks[kRejectCallback]);
+    	executor(resVal=>PromiseResolve(promise, resVal),err=> PromiseReject(promise, err));
 	}catch(e){
 		 _Call(callbacks[kRejectCallback], UNDEFINED, e);
-
 	};
 	return promise
+}
+//判断是否是Promise
+function IsPromise(x) {
+  return x instanceof GlobalPromise
 }
 function PromiseInit(promise) {
   return PromiseSet(promise, kPending, UNDEFINED);
 }
+//设置symbol
 function PromiseSet(promise, status, value) {
   SET_PRIVATE(promise, promiseStateSymbol, status);
   SET_PRIVATE(promise, promiseResultSymbol, value);
@@ -36,10 +40,50 @@ function PromiseSet(promise, status, value) {
   SET_PRIVATE(promise, promiseDeferredReactionSymbol, UNDEFINED);
   return promise;
 }
+// Combinators.
+// ES#sec-promise.resolve
+// Promise.resolve ( x )
+function PromiseResolve(x) {
+  if (IsPromise(x) return x;
+  // Avoid creating resolving functions.
+  if (this === GlobalPromise) {
+    var promise = PromiseCreate();
+    ResolvePromise(promise, x);
+    return promise;
+  }
+  var promiseCapability = NewPromiseCapability(this, true);
+  _Call(promiseCapability.resolve, UNDEFINED, x);
+  return promiseCapability.promise;
+}
 
-function PromiseCreateAndSet(status, value) {
-  var promise = new GlobalPromise(promiseRawSymbol);
-  return PromiseSet(promise, status, value);
+// ES#sec-newpromisecapability
+// NewPromiseCapability ( C )
+function NewPromiseCapability(C, debugEvent) {
+  if (C === GlobalPromise) {
+    // Optimized case, avoid extra closure.
+    var promise = PromiseCreate();
+    // TODO(gsathya): Remove container for callbacks when this is
+    // moved to CPP/TF.
+    var callbacks = %create_resolving_functions(promise, debugEvent);
+    return {
+      promise: promise,
+      resolve: callbacks[kResolveCallback],
+      reject: callbacks[kRejectCallback]
+    };
+  }
+
+  var result = {promise: UNDEFINED, resolve: UNDEFINED, reject: UNDEFINED };
+  result.promise = new C((resolve, reject) => {
+    if (!IS_UNDEFINED(result.resolve) || !IS_UNDEFINED(result.reject))
+        throw %make_type_error(kPromiseExecutorAlreadyInvoked);
+    result.resolve = resolve;
+    result.reject = reject;
+  });
+
+  if (!IS_CALLABLE(result.resolve) || !IS_CALLABLE(result.reject))
+      throw %make_type_error(kPromiseNonCallable);
+
+  return result;
 }
 
 function PromiseHandle(value, handler, deferred) {
@@ -53,8 +97,6 @@ function PromiseHandle(value, handler, deferred) {
   } catch (exception) {  // Natives syntax to mark this catch block.
     try {
       if (IS_UNDEFINED(deferred.reject)) {
-        // Pass false for debugEvent so .then chaining does not trigger
-        // redundant ExceptionEvents.
         PromiseReject(deferred.promise, exception, false);
         PromiseSet(deferred.promise, kRejected, exception);
       } else {
@@ -96,11 +138,6 @@ function PromiseAttachCallbacks(promise, deferred, onResolve, onReject) {
 function PromiseIdResolveHandler(x) { return x; }
 function PromiseIdRejectHandler(r) { %_ReThrow(r); }
 SET_PRIVATE(PromiseIdRejectHandler, promiseForwardingHandlerSymbol, true);
-// For bootstrapper.
-
-function IsPromise(x) {
-  return IS_RECEIVER(x) && HAS_DEFINED_PRIVATE(x, promiseStateSymbol);
-}
 
 function PromiseCreate() {
   return PromiseInit(new GlobalPromise(promiseRawSymbol));
@@ -174,35 +211,6 @@ function DoRejectPromise(promise, reason) {
   PromiseSet(promise, kRejected, reason);
 }
 
-// ES#sec-newpromisecapability
-// NewPromiseCapability ( C )
-function NewPromiseCapability(C, debugEvent) {
-  if (C === GlobalPromise) {
-    // Optimized case, avoid extra closure.
-    var promise = PromiseCreate();
-    // TODO(gsathya): Remove container for callbacks when this is
-    // moved to CPP/TF.
-    var callbacks = %create_resolving_functions(promise, debugEvent);
-    return {
-      promise: promise,
-      resolve: callbacks[kResolveCallback],
-      reject: callbacks[kRejectCallback]
-    };
-  }
-
-  var result = {promise: UNDEFINED, resolve: UNDEFINED, reject: UNDEFINED };
-  result.promise = new C((resolve, reject) => {
-    if (!IS_UNDEFINED(result.resolve) || !IS_UNDEFINED(result.reject))
-        throw %make_type_error(kPromiseExecutorAlreadyInvoked);
-    result.resolve = resolve;
-    result.reject = reject;
-  });
-
-  if (!IS_CALLABLE(result.resolve) || !IS_CALLABLE(result.reject))
-      throw %make_type_error(kPromiseNonCallable);
-
-  return result;
-}
 
 // ES#sec-promise.reject
 // Promise.reject ( x )
@@ -289,42 +297,16 @@ function PromiseCatch(onReject) {
   return this.then(UNDEFINED, onReject);
 }
 
-// Combinators.
 
-// ES#sec-promise.resolve
-// Promise.resolve ( x )
-function PromiseResolve(x) {
-  if (!IS_RECEIVER(this)) {
-    throw %make_type_error(kCalledOnNonObject, PromiseResolve);
-  }
-  if (IsPromise(x) && x.constructor === this) return x;
-
-  // Avoid creating resolving functions.
-  if (this === GlobalPromise) {
-    var promise = PromiseCreate();
-    ResolvePromise(promise, x);
-    return promise;
-  }
-
-  // debugEvent is not so meaningful here as it will be resolved
-  var promiseCapability = NewPromiseCapability(this, true);
-  %_Call(promiseCapability.resolve, UNDEFINED, x);
-  return promiseCapability.promise;
-}
 
 // ES#sec-promise.all
 // Promise.all ( iterable )
 function PromiseAll(iterable) {
-  if (!IS_RECEIVER(this)) {
-    throw %make_type_error(kCalledOnNonObject, "Promise.all");
-  }
-
   // false debugEvent so that forwarding the rejection through all does not
   // trigger redundant ExceptionEvents
   var deferred = NewPromiseCapability(this, false);
   var resolutions = new InternalArray();
   var count;
-
   // For catch prediction, don't treat the .then calls as handling it;
   // instead, recurse outwards.
   var instrumenting = DEBUG_IS_ACTIVE;
@@ -367,7 +349,7 @@ function PromiseAll(iterable) {
     if (--count === 0) {
       var valuesArray = [];
       %MoveArrayContents(resolutions, valuesArray);
-      %_Call(deferred.resolve, UNDEFINED, valuesArray);
+      _Call(deferred.resolve, UNDEFINED, valuesArray);
     }
 
   } catch (e) {
@@ -379,10 +361,6 @@ function PromiseAll(iterable) {
 // ES#sec-promise.race
 // Promise.race ( iterable )
 function PromiseRace(iterable) {
-  if (!IS_RECEIVER(this)) {
-    throw %make_type_error(kCalledOnNonObject, PromiseRace);
-  }
-
   // false debugEvent so that forwarding the rejection through race does not
   // trigger redundant ExceptionEvents
   var deferred = NewPromiseCapability(this, false);
@@ -405,70 +383,11 @@ function PromiseRace(iterable) {
       }
     }
   } catch (e) {
-    %_Call(deferred.reject, UNDEFINED, e);
+    _Call(deferred.reject, UNDEFINED, e);
   }
   return deferred.promise;
 }
 
-
-// Utility for debugger
-
-function PromiseHasUserDefinedRejectHandlerCheck(handler, deferred) {
-  // Recurse to the forwarding Promise, if any. This may be due to
-  //  - await reaction forwarding to the throwaway Promise, which has
-  //    a dependency edge to the outer Promise.
-  //  - PromiseIdResolveHandler forwarding to the output of .then
-  //  - Promise.all/Promise.race forwarding to a throwaway Promise, which
-  //    has a dependency edge to the generated outer Promise.
-  if (GET_PRIVATE(handler, promiseForwardingHandlerSymbol)) {
-    return PromiseHasUserDefinedRejectHandlerRecursive(deferred.promise);
-  }
-
-  // Otherwise, this is a real reject handler for the Promise
-  return true;
-}
-
-function PromiseHasUserDefinedRejectHandlerRecursive(promise) {
-  // If this promise was marked as being handled by a catch block
-  // in an async function, then it has a user-defined reject handler.
-  if (GET_PRIVATE(promise, promiseHandledHintSymbol)) return true;
-
-  // If this Promise is subsumed by another Promise (a Promise resolved
-  // with another Promise, or an intermediate, hidden, throwaway Promise
-  // within async/await), then recurse on the outer Promise.
-  // In this case, the dependency is one possible way that the Promise
-  // could be resolved, so it does not subsume the other following cases.
-  var outerPromise = GET_PRIVATE(promise, promiseHandledBySymbol);
-  if (outerPromise &&
-      PromiseHasUserDefinedRejectHandlerRecursive(outerPromise)) {
-    return true;
-  }
-
-  var queue = GET_PRIVATE(promise, promiseRejectReactionsSymbol);
-  var deferred = GET_PRIVATE(promise, promiseDeferredReactionSymbol);
-
-  if (IS_UNDEFINED(queue)) return false;
-
-  if (!IS_ARRAY(queue)) {
-    return PromiseHasUserDefinedRejectHandlerCheck(queue, deferred);
-  }
-
-  for (var i = 0; i < queue.length; i += 2) {
-    if (PromiseHasUserDefinedRejectHandlerCheck(queue[i], queue[i + 1])) {
-      return true;
-    }
-  }
-  return false;
-}
-
-// Return whether the promise will be handled by a user-defined reject
-// handler somewhere down the promise chain. For this, we do a depth-first
-// search for a reject handler that's not the default PromiseIdRejectHandler.
-// This function also traverses dependencies of one Promise on another,
-// set up through async/await and Promises resolved with Promises.
-function PromiseHasUserDefinedRejectHandler() {
-  return PromiseHasUserDefinedRejectHandlerRecursive(this);
-};
 
 function MarkPromiseAsHandled(promise) {
   SET_PRIVATE(promise, promiseHasHandlerSymbol, true);

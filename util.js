@@ -19,8 +19,12 @@ const utils = {
 	}
 }
 
+const IS_CALLABLE = arg => typeof(arg) === 'function';
+
+
 module.exports = {
 	SET_PRIVATE,
 	_Call,
-	utils
+	utils,
+	IS_CALLABLE
 }
