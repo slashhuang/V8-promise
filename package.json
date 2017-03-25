@@ -1,0 +1,27 @@
+{
+  "name": "v8-promise",
+  "version": "1.0.0",
+  "description": "> A hand-write promise implementation with simpler logic",
+  "main": "promise.js",
+  "scripts": {
+    "test": "nodemon test.js",
+    "start": "nodemon promise.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/slashhuang/V8-promise.git"
+  },
+  "keywords": [
+    "promise",
+    "v8"
+  ],
+  "author": "slashhuang",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/slashhuang/V8-promise/issues"
+  },
+  "homepage": "https://github.com/slashhuang/V8-promise#readme",
+  "devDependencies": {
+    "nodemon": "^1.11.0"
+  }
+}
