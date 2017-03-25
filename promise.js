@@ -3,8 +3,6 @@
  * @Author slashhuang
  * 17/3/25
  */
-
-
 // new Promise((resolve,reject)中resolve,reject对应的symbol
 let resolveSymbol = Symbol('resolve');
 let rejectSymbol = Symbol('reject');
@@ -16,7 +14,6 @@ const fulfillState = 1;
 const rejectState = -1;
 const pendingState = 0;
 
-
 //在then/catch中做hook
 const resolveFnSymbol = Symbol('Promise#resolveFn');
 const rejectFnSymbol = Symbol('Promise#rejectFn');
@@ -25,9 +22,6 @@ const rejectFnSymbol = Symbol('Promise#rejectFn');
 const nextThenCatchSymbol =  Symbol('nextThenCatch');
 const executorMicrotask = Symbol('microtask');
 let {defineProperty,RunLater} = require('./util');
-
-
-
 
 //promise shape
 class SuperPromise{
@@ -124,6 +118,7 @@ class SuperPromise{
 	catch(fn){
 		return [nextThenCatchSymbol]([fn],'reject')
 	}
+	//@TODO
 	static resolve(){
 
 	}
