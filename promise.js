@@ -48,7 +48,6 @@ class SuperPromise{
 		let hookFn= '';
 		if(state == fulfillState || state == rejectState){
 			hookFn = state == fulfillState?resolveFnSymbol:rejectFnSymbol;
-			console.log(`RunLater ${PromiseVal}`)
 			RunLater(()=>newPromise[hookFn](PromiseVal))
 		}
 	}
@@ -56,13 +55,11 @@ class SuperPromise{
 		defineProperty(this,stateSymbol,fulfillState);
 		this.PromiseVal =  val;
 		this.RunLater()
-		console.log(`resolved to ${val}`);
 	}
 	[rejectSymbol](error){
 		defineProperty(this,stateSymbol,rejectState);
 		this.PromiseVal =  error;
 		this.RunLater()
-		console.log(`rejected to ${val}`)
 	}
 	// fnArr ==> resolve reject
 	[nextThenCatchSymbol](fnArr,type){

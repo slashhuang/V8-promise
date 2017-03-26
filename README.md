@@ -16,6 +16,11 @@
 
 > use symbol to avoid exposure of inner method
 
+
+## mocha 测试结果
+
+![测试通过](./img/mocha.png)
+
 ## copyright
 
 > @slashhuang  
