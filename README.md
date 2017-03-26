@@ -19,7 +19,7 @@
 
 ## mocha 测试结果
 
-![测试通过](./img/mocha.png)
+![测试通过](./img/test.png)
 
 ## copyright
 
